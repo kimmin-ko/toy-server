@@ -1,0 +1,123 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.2.21'
+    id 'org.jetbrains.kotlin.plugin.spring' version '2.2.21'
+    id 'org.springframework.boot' version '4.0.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.google.protobuf' version '0.9.5'
+    id 'org.jetbrains.kotlin.plugin.jpa' version '2.2.21'
+}
+
+group = 'study.min'
+version = '0.0.1'
+description = 'product'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('springGrpcVersion', "1.0.1")
+}
+
+dependencies {
+    // Web //
+    implementation 'io.grpc:grpc-services'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.grpc:spring-grpc-server-web-spring-boot-starter'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // Kotlin //
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation 'tools.jackson.module:jackson-module-kotlin'
+
+    // Dev Tool //
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // JPA //
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // DB //
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // Flyway //
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+
+    // NoSQL //
+    implementation 'org.redisson:redisson-spring-boot-starter:4.1.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Kafka //
+    implementation 'org.springframework.boot:spring-boot-starter-kafka'
+
+    // Lombok //
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test //
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.testcontainers:testcontainers-kafka'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+    testImplementation 'org.springframework.grpc:spring-grpc-test'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.grpc:spring-grpc-dependencies:${springGrpcVersion}"
+    }
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll '-Xjsr305=strict', '-Xannotation-default-target=param-property'
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java'
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {
+                option '@generated=omit'
+            }
+        }
+    }
+}
+
+allOpen {
+    annotation 'jakarta.persistence.Entity'
+    annotation 'jakarta.persistence.MappedSuperclass'
+    annotation 'jakarta.persistence.Embeddable'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

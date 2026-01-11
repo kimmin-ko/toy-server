@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    url: jdbc:tc:mysql:8.0:///product?TC_REUSABLE=true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+
+  # Flyway 비활성화 (ddl-auto가 테이블 생성)
+  flyway:
+    enabled: true
+
+  # Redis는 로컬 사용 (localhost:6379)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      username: kimmin2300
+      password: skgksxp9202
+
+  # Virtual Thread
+  threads:
+    virtual:
+      enabled: true

@@ -1,0 +1,9 @@
+pluginManagement {
+    plugins {
+        id 'org.jetbrains.kotlin.jvm' version '2.3.0'
+    }
+}
+rootProject.name = 'toy-server'
+
+// MSA services
+include 'product'
