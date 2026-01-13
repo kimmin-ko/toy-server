@@ -30,4 +30,10 @@ open class ProductStock {
         this.quantity = currentQuantity - quantity
     }
 
+    fun increase(quantity: Int) {
+        require(quantity > 0) { "quantity must be greater than 0" }
+        val currentQuantity = this.quantity ?: 0
+        this.quantity = currentQuantity + quantity
+    }
+
 }

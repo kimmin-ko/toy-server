@@ -63,8 +63,10 @@ server:
 
 # gRPC
 grpc:
-  server:
-    port: 8092
+  client:
+    product-service:
+      host: localhost
+      port: 8091
 
 # Logging
 logging:

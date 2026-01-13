@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import study.min.product.common.lock.DistributedLock
 import study.min.product.event.StockDecreasedEvent
 import study.min.product.event.StockEventPublisher
+import study.min.product.event.StockIncreasedEvent
 import study.min.product.event.StockLowWarningEvent
 import study.min.product.event.StockOutEvent
 import study.min.product.persistence.product.ProductStockRepository
@@ -66,5 +67,33 @@ class ProductStockService(
                 )
             )
         }
+    }
+
+    /**
+     * 재고 증가 + Redis Pub/Sub 이벤트 발행
+     * - 주문 취소, 반품, 입고 등
+     */
+    @DistributedLock(
+        key = "'stock:' + #productId",
+        waitTime = 10,
+        leaseTime = 5,
+        errorMessage = "재고 증가 처리 중 오류가 발생했습니다."
+    )
+    @Transactional
+    fun increase(productId: Long, quantity: Int, reason: String = "입고") {
+        val productStock = productStockRepository.getByProductId(productId)
+        productStock.increase(quantity)
+
+        val remainingStock = productStock.quantity ?: 0
+
+        // 재고 증가 이벤트 발행
+        stockEventPublisher.publishStockIncreased(
+            StockIncreasedEvent(
+                productId = productId,
+                increasedQuantity = quantity,
+                remainingStock = remainingStock,
+                reason = reason
+            )
+        )
     }
 }

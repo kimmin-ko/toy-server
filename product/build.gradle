@@ -35,7 +35,7 @@ dependencies {
     // Web //
     implementation 'io.grpc:grpc-services'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'org.springframework.grpc:spring-grpc-server-web-spring-boot-starter'
+    implementation 'org.springframework.grpc:spring-grpc-spring-boot-starter'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // Kotlin //
