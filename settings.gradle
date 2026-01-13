@@ -7,3 +7,4 @@ rootProject.name = 'toy-server'
 
 // MSA services
 include 'product'
+include 'order'

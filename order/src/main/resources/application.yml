@@ -1,11 +1,11 @@
 spring:
   application:
-    name: product
+    name: order
 
   # Database
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/product?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+    url: jdbc:mysql://localhost:3306/orders?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
     username: kimmin2300
     password: kimmin2300
     hikari:
@@ -58,13 +58,13 @@ spring:
 
 # Server
 server:
-  port: 8081
+  port: 8082
   shutdown: graceful
 
 # gRPC
 grpc:
   server:
-    port: 8091
+    port: 8092
 
 # Logging
 logging:
