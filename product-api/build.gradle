@@ -1,0 +1,65 @@
+plugins {
+    id 'java-library'
+    id 'org.jetbrains.kotlin.jvm' version '2.2.21'
+    id 'com.google.protobuf' version '0.9.5'
+}
+
+group = 'study.min'
+version = '0.0.1'
+description = 'Product Service gRPC API'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    grpcVersion = '1.72.0'
+    protobufVersion = '4.31.1'
+}
+
+dependencies {
+    // gRPC & Protobuf
+    api "io.grpc:grpc-stub:${grpcVersion}"
+    api "io.grpc:grpc-protobuf:${grpcVersion}"
+    api "com.google.protobuf:protobuf-java:${protobufVersion}"
+
+    // Required for generated code
+    compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
+
+    // Kotlin
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib'
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {
+                option '@generated=omit'
+            }
+        }
+    }
+}
+
+// Ensure generated sources are included in the jar
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
+}
