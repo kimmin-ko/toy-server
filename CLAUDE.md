@@ -41,9 +41,8 @@ CREATE DATABASE orders;  # 'order'는 예약어이므로 'orders' 사용
 # 테스트 제외 빌드
 ./gradlew build -x test
 
-# Proto 파일에서 gRPC 코드 생성
-./gradlew :product:generateProto
-./gradlew :order:generateProto
+# Proto 파일에서 gRPC 코드 생성 (product-api 모듈에서 관리)
+./gradlew :product-api:generateProto
 ```
 
 ### 서비스 실행
@@ -87,11 +86,12 @@ Order Service (Client)  ──gRPC──>  Product Service (Server)
 ```
 
 ### gRPC 구현 방식
-- **Proto 파일**: `product/src/main/proto/product_service.proto`
+- **Proto 파일**: `product-api/src/main/proto/product_service.proto` (별도 모듈로 분리)
+- **product-api 모듈**: Proto 파일과 생성된 gRPC 스텁 코드를 포함하는 공유 라이브러리
 - **Product Service**: `ProductServiceGrpc.ProductServiceImplBase`를 상속하고 `@Component`로 등록
 - **수동 gRPC 서버**: `GrpcServerConfig.kt`에서 8091 포트로 수동 시작 (Spring gRPC auto-config이 Spring Boot 4.0.1에서 작동하지 않음)
 - **Order Service**: `ManagedChannel`로 Product gRPC 서버 연결
-- **Proto 동기화**: 현재는 product에서 order로 수동 복사 (향후: 빌드 시 자동 복사 예정)
+- **Proto 동기화**: `product-api` 모듈을 의존성으로 추가하여 자동 동기화 (`implementation project(':product-api')`)
 
 ### 분산락 패턴
 Product Service는 **Redisson 분산락**을 AOP로 적용:
@@ -148,10 +148,26 @@ ProductStockService.decrease()
 ## 핵심 구현 세부사항
 
 ### Proto 파일 관리 방식
-현재는 proto 파일이 **중복**되어 있음 (product와 order 모두 `product_service.proto` 보유). 실무 MSA에서는:
-- Server 팀이 proto 파일 관리
-- Client 라이브러리(jar)를 생성해서 Nexus/Artifactory에 배포
-- Client 서비스는 의존성 추가: `implementation 'com.company:product-api:1.0.0'`
+`product-api` 모듈에서 Proto 파일을 중앙 관리:
+```
+product-api/
+├── build.gradle              # protobuf 플러그인으로 gRPC 코드 생성
+└── src/main/proto/
+    └── product_service.proto # 원본 Proto 파일
+```
+
+**의존성 구조**:
+- `product` → `implementation project(':product-api')` (서버 구현)
+- `order` → `implementation project(':product-api')` (클라이언트 구현)
+
+**Proto 파일 변경 시**:
+1. `product-api/src/main/proto/product_service.proto` 수정
+2. `./gradlew :product-api:generateProto` 실행
+3. product와 order 모듈 재빌드 (의존성으로 자동 반영)
+
+**실무 MSA에서의 배포** (Nexus/Artifactory 사용 시):
+- `product-api`를 별도 저장소로 분리
+- jar로 배포: `implementation 'com.company:product-api:1.0.0'`
 
 ### gRPC 에러 처리
 Product Service는 gRPC Status 코드 사용:
@@ -188,13 +204,6 @@ Product Service는 실행되지만 gRPC 포트 8091이 리스닝하지 않는 �
 - Product Service가 실행 중인지 확인: `lsof -i :8091`
 - Order Service는 시작 시 `✅ [gRPC Client] Product Service 연결됨` 로그를 출력하지만, 실제 연결은 lazy (첫 RPC 호출 시 연결)
 
-### Proto 파일 동기화
-Proto 파일은 수동으로 동기화해야 함. Product의 proto가 변경되면:
-```bash
-cp product/src/main/proto/product_service.proto order/src/main/proto/
-./gradlew :order:generateProto
-```
-
 ### 데이터베이스 접속 정보
 `application.yml` 파일에서 MySQL 접속 정보 수정:
 - Product: `jdbc:mysql://localhost:3306/product`
@@ -203,8 +212,13 @@ cp product/src/main/proto/product_service.proto order/src/main/proto/
 ## 프로젝트 구조
 ```
 toy-server/
+├── product-api/                # gRPC API 공유 모듈 (Proto 파일 및 생성 코드)
+│   ├── build.gradle           # protobuf 플러그인 설정
+│   └── src/main/proto/
+│       └── product_service.proto
+│
 ├── product/                    # 상품 및 재고 서비스
-│   ├── src/main/proto/        # gRPC proto 파일 (원본)
+│   ├── build.gradle           # implementation project(':product-api')
 │   ├── src/main/kotlin/
 │   │   ├── config/            # GrpcServerConfig, RedisPubSubConfig, JpaConfig
 │   │   ├── grpc/              # ProductGrpcService (서버 구현)
@@ -215,7 +229,7 @@ toy-server/
 │       └── db/migration/      # Flyway SQL 스크립트
 │
 └── order/                      # 주문 서비스
-    ├── src/main/proto/        # product에서 복사됨 (TODO: 자동 동기화)
+    ├── build.gradle           # implementation project(':product-api')
     ├── src/main/kotlin/
     │   ├── grpc/              # ProductGrpcClient (클라이언트 구현)
     │   ├── service/           # OrderService (gRPC로 Product 호출)

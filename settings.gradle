@@ -5,6 +5,9 @@ pluginManagement {
 }
 rootProject.name = 'toy-server'
 
+// gRPC API modules
+include 'product-api'
+
 // MSA services
 include 'product'
 include 'order'
