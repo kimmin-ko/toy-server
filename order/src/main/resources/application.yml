@@ -68,6 +68,12 @@ grpc:
       host: localhost
       port: 8091
 
+# REST Client
+rest:
+  client:
+    product-service:
+      url: http://localhost:8081
+
 # Logging
 logging:
   level:
