@@ -65,6 +65,7 @@ CREATE DATABASE orders;  # 'order'는 예약어이므로 'orders' 사용
 # 특정 테스트 실행
 ./gradlew :product:test --tests ProductStockServiceConcurrencyTest
 ./gradlew :product:test --tests RedisPubSubTest
+./gradlew :product:test --tests GrpcVsRestPerformanceTest
 
 # 포트 확인
 lsof -i :8081  # Product HTTP
@@ -76,14 +77,19 @@ lsof -i :8082  # Order HTTP
 
 ### 서비스 간 통신 구조
 ```
-Order Service (Client)  ──gRPC──>  Product Service (Server)
-     │                                  │
-     │                                  ├─ REST API (8081)
-     ├─ REST API (8082)                 ├─ gRPC Server (8091)
-     ├─ gRPC Client                     ├─ MySQL (product DB)
-     └─ MySQL (orders DB)               ├─ Redis (분산락)
-                                        └─ Redis Pub/Sub (이벤트)
+Order Service (Client)  ──gRPC/REST──>  Product Service (Server)
+     │                                       │
+     │                                       ├─ REST API (8081)
+     ├─ REST API (8082)                      │   └─ /api/products/*
+     ├─ gRPC Client                          ├─ gRPC Server (8091)
+     ├─ REST Client (추가됨)                   ├─ MySQL (product DB)
+     └─ MySQL (orders DB)                    ├─ Redis (분산락)
+                                             └─ Redis Pub/Sub (이벤트)
 ```
+
+**통신 방식**:
+- **gRPC (주력)**: 타입 안전성, 효율적인 직렬화, HTTP/2 멀티플렉싱
+- **REST API (추가됨)**: 표준 HTTP/JSON, gRPC와 동일한 비즈니스 로직 재사용
 
 ### gRPC 구현 방식
 - **Proto 파일**: `product-api/src/main/proto/product_service.proto` (별도 모듈로 분리)
@@ -169,11 +175,27 @@ product-api/
 - `product-api`를 별도 저장소로 분리
 - jar로 배포: `implementation 'com.company:product-api:1.0.0'`
 
+### REST API 구현
+Product Service는 gRPC와 동일한 기능을 REST API로도 제공:
+- **엔드포인트**:
+  - `POST /api/products/stock/check` - 재고 확인
+  - `GET /api/products/{productId}` - 상품 정보 조회
+  - `POST /api/products/{productId}/stock/decrease` - 재고 차감
+- **비즈니스 로직 재사용**: `ProductStockService`를 그대로 사용하여 분산락과 Redis Pub/Sub 자동 적용
+- **에러 매핑**: gRPC Status → HTTP Status (RESOURCE_EXHAUSTED→409, NOT_FOUND→404, INTERNAL→500)
+
 ### gRPC 에러 처리
 Product Service는 gRPC Status 코드 사용:
 - `Status.RESOURCE_EXHAUSTED`: 재고 부족
 - `Status.NOT_FOUND`: 상품 없음
 - `Status.INTERNAL`: 기타 오류
+
+### 성능 비교 테스트
+`GrpcVsRestPerformanceTest`로 gRPC vs REST 성능 비교:
+- **Latency 측정**: 평균/최소/최대/P95/P99 응답 시간
+- **페이로드 크기**: Protobuf vs JSON 직렬화 비용
+- **동시성 부하**: 100/500/1000 스레드 동시 요청 시 TPS 측정
+- **결과**: 콘솔에 표 형식으로 비교 결과 출력
 
 ### 주문 생성 플로우
 1. Order Service → gRPC `checkStock()` → Product Service (재고 확인)
@@ -221,20 +243,47 @@ toy-server/
 │   ├── build.gradle           # implementation project(':product-api')
 │   ├── src/main/kotlin/
 │   │   ├── config/            # GrpcServerConfig, RedisPubSubConfig, JpaConfig
+│   │   ├── controller/        # ProductRestController (REST API)
+│   │   ├── dto/               # ProductRestDto (REST 요청/응답)
+│   │   ├── exception/         # RestExceptionHandler
 │   │   ├── grpc/              # ProductGrpcService (서버 구현)
 │   │   ├── service/           # ProductStockService (@DistributedLock 적용)
 │   │   ├── event/             # StockEventPublisher/Subscriber
 │   │   └── persistence/       # JPA 엔티티, Repository
-│   └── src/main/resources/
-│       └── db/migration/      # Flyway SQL 스크립트
+│   ├── src/main/resources/
+│   │   └── db/migration/      # Flyway SQL 스크립트
+│   └── src/test/kotlin/
+│       └── performance/       # GrpcVsRestPerformanceTest, 성능 측정 인프라
 │
 └── order/                      # 주문 서비스
     ├── build.gradle           # implementation project(':product-api')
     ├── src/main/kotlin/
+    │   ├── client/            # ProductRestClient (REST 클라이언트)
+    │   ├── config/            # RestClientConfig
+    │   ├── dto/               # ProductRestDto (REST 요청/응답)
     │   ├── grpc/              # ProductGrpcClient (클라이언트 구현)
-    │   ├── service/           # OrderService (gRPC로 Product 호출)
+    │   ├── service/           # OrderService (gRPC/REST로 Product 호출)
     │   ├── controller/        # REST API
     │   └── persistence/       # Order, OrderItem 엔티티
     └── src/main/resources/
+        ├── application.yml    # rest.client.product-service.url 설정 포함
         └── db/migration/      # Flyway SQL 스크립트
+```
+
+## REST API 수동 테스트
+
+Product Service REST API 테스트:
+```bash
+# 재고 확인
+curl -X POST http://localhost:8081/api/products/stock/check \
+  -H "Content-Type: application/json" \
+  -d '{"productId": 1, "quantity": 10}'
+
+# 상품 조회
+curl http://localhost:8081/api/products/1
+
+# 재고 차감
+curl -X POST http://localhost:8081/api/products/1/stock/decrease \
+  -H "Content-Type: application/json" \
+  -d '{"quantity": 5, "orderId": "TEST-001"}'
 ```
