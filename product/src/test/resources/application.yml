@@ -18,7 +18,7 @@ spring:
       host: localhost
       port: 6379
       username: kimmin2300
-      password: skgksxp9202
+      password: kimmin2300
 
   # Virtual Thread
   threads:

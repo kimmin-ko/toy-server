@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.web.client.RestClient
 import study.min.product.ProductApplication
 import study.min.product.dto.*
@@ -29,7 +30,8 @@ import kotlin.math.min
  */
 @SpringBootTest(
     classes = [ProductApplication::class],
-    webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT
+    webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT,
+    properties = ["server.port=8081"]
 )
 class GrpcVsRestPerformanceTest {
 
@@ -38,6 +40,9 @@ class GrpcVsRestPerformanceTest {
 
     @Autowired
     private lateinit var productStockRepository: ProductStockRepository
+
+    @LocalServerPort
+    private var port: Int = 0
 
     private lateinit var restClient: RestClient
     private lateinit var grpcChannel: ManagedChannel
@@ -52,9 +57,11 @@ class GrpcVsRestPerformanceTest {
         println("✅ 테스트 환경 준비 중...")
         println("========================================")
 
+        println("📍 할당된 포트: $port")
+
         // REST 클라이언트 초기화
         restClient = RestClient.builder()
-            .baseUrl("http://localhost:8081")
+            .baseUrl("http://localhost:$port")
             .build()
 
         // gRPC 스텁 초기화
@@ -65,6 +72,35 @@ class GrpcVsRestPerformanceTest {
         grpcStub = ProductServiceGrpc.newBlockingStub(grpcChannel)
 
         metricsCollector = MetricsCollector()
+
+        // 서버 준비 대기 (gRPC + REST)
+        println("⏳ 서버 준비 대기 중...")
+
+        // REST API가 준비될 때까지 대기 (최대 30초)
+        var serverReady = false
+        repeat(30) { attempt ->
+            try {
+                // 간단한 GET 요청으로 서버 확인
+                val testUrl = "http://localhost:$port/api/products/1"
+                java.net.URL(testUrl).openConnection().apply {
+                    connectTimeout = 1000
+                    readTimeout = 1000
+                    connect()
+                }
+                serverReady = true
+                println("✅ REST 서버 준비 완료 (포트: $port, 시도: ${attempt + 1})")
+                return@repeat
+            } catch (e: Exception) {
+                if (attempt % 5 == 0) {
+                    println("⏳ REST 서버 대기 중... (시도 ${attempt + 1}/30)")
+                }
+                Thread.sleep(1000)
+            }
+        }
+
+        if (!serverReady) {
+            throw IllegalStateException("REST 서버가 30초 내에 준비되지 않았습니다. 포트: $port")
+        }
 
         // 테스트 데이터 생성
         val product = Product().apply {
@@ -304,21 +340,31 @@ class GrpcVsRestPerformanceTest {
         val metrics = MethodMetrics("checkStock", Protocol.REST)
 
         repeat(iterations) { index ->
-            val request = CheckStockRestRequest(testProductId, 10)
+            try {
+                val request = CheckStockRestRequest(testProductId, 10)
 
-            val (response, elapsed) = metricsCollector.measureLatency {
-                restClient.post()
-                    .uri("/api/products/stock/check")
-                    .body(request)
-                    .retrieve()
-                    .body(CheckStockRestResponse::class.java)!!
-            }
+                val (response, elapsed) = metricsCollector.measureLatency {
+                    restClient.post()
+                        .uri("/api/products/stock/check")
+                        .body(request)
+                        .retrieve()
+                        .body(CheckStockRestResponse::class.java)!!
+                }
 
-            metrics.addLatency(elapsed)
-            metrics.successCount.incrementAndGet()
+                metrics.addLatency(elapsed)
+                metrics.successCount.incrementAndGet()
 
-            if (index == 0) {
-                metrics.payloadSize = metricsCollector.measureRestPayloadSize(request, response)
+                if (index == 0) {
+                    metrics.payloadSize = metricsCollector.measureRestPayloadSize(request, response)
+                }
+            } catch (e: Exception) {
+                println("❌ REST checkStock 실패 (반복 $index): ${e.javaClass.simpleName} - ${e.message}")
+                if (index == 0) {
+                    // 첫 번째 요청이 실패하면 상세 에러 출력
+                    e.printStackTrace()
+                    throw e
+                }
+                metrics.failCount.incrementAndGet()
             }
         }
 
