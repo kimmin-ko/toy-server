@@ -7,8 +7,10 @@
 Toy-server는 **마이크로서비스 아키텍처(MSA)** 학습용 프로젝트로, 이커머스 시스템을 구현합니다:
 - **Product Service**: 상품 및 재고 관리 (분산락 적용)
 - **Order Service**: 주문 관리 (gRPC로 Product 서비스 호출)
-- **서비스 간 통신**: gRPC (동기 호출)
-- **이벤트 기반 아키텍처**: Redis Pub/Sub (재고 변경 알림)
+- **서비스 간 통신**: gRPC (동기 호출), REST API
+- **이벤트 기반 아키텍처**:
+  - Redis Pub/Sub (재고 변경 알림)
+  - Kafka (주문 이벤트 발행/소비, 재시도 로직)
 
 ## 빌드 및 실행 명령어
 
@@ -20,6 +22,17 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 # 필수 서비스 실행 (Docker)
 docker run -d -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root mysql:8
 docker run -d -p 6379:6379 redis
+
+# Kafka (주문 이벤트 메시징)
+docker run -d --name kafka -p 9092:9092 \
+  -e KAFKA_CFG_NODE_ID=0 \
+  -e KAFKA_CFG_PROCESS_ROLES=controller,broker \
+  -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+  -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@localhost:9093 \
+  -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+  -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
+  bitnami/kafka:latest
 ```
 
 ### 데이터베이스 생성
@@ -82,14 +95,18 @@ Order Service (Client)  ──gRPC/REST──>  Product Service (Server)
      │                                       ├─ REST API (8081)
      ├─ REST API (8082)                      │   └─ /api/products/*
      ├─ gRPC Client                          ├─ gRPC Server (8091)
-     ├─ REST Client (추가됨)                   ├─ MySQL (product DB)
-     └─ MySQL (orders DB)                    ├─ Redis (분산락)
-                                             └─ Redis Pub/Sub (이벤트)
+     ├─ REST Client                          ├─ MySQL (product DB)
+     ├─ MySQL (orders DB)                    ├─ Redis (분산락)
+     └─ Kafka Producer                       ├─ Redis Pub/Sub (재고 이벤트)
+              │                              └─ Kafka Consumer
+              └──> Kafka (order-created) ────┘
+                        └─> DLT (재시도 실패)
 ```
 
 **통신 방식**:
 - **gRPC (주력)**: 타입 안전성, 효율적인 직렬화, HTTP/2 멀티플렉싱
-- **REST API (추가됨)**: 표준 HTTP/JSON, gRPC와 동일한 비즈니스 로직 재사용
+- **REST API**: 표준 HTTP/JSON, gRPC와 동일한 비즈니스 로직 재사용
+- **Kafka**: 비동기 이벤트 기반 통신, 재시도 및 DLT 지원
 
 ### gRPC 구현 방식
 - **Proto 파일**: `product-api/src/main/proto/product_service.proto` (별도 모듈로 분리)
@@ -130,6 +147,38 @@ ProductStockService.decrease()
 - 이벤트 종류: StockDecreasedEvent, StockIncreasedEvent, StockLowWarningEvent, StockOutEvent
 - 채널: `stock:decreased`, `stock:increased`, `stock:low-warning`, `stock:out`
 - 제약사항: 여러 인스턴스에서 중복 수신 (운영 환경에서는 Redis Streams 또는 멱등성 처리 고려)
+
+### Kafka 이벤트 기반 아키텍처
+```
+Order Service (Producer)
+    └─> OrderEventPublisher.publishOrderCreated()
+            └─> Kafka Topic (order-created)
+                    └─> Product Service (Consumer)
+                            ├─> OrderEventConsumer.consumeOrderCreated()
+                            │       ├─ 성공: 이벤트 처리 완료
+                            │       └─ 실패: 재시도 (3회, Exponential Backoff)
+                            └─> 재시도 실패 시 DLT (order-created.DLT)
+                                    └─> OrderEventConsumer.consumeOrderCreatedDLT()
+```
+
+**재시도 로직**:
+- **재시도 횟수**: 3회
+- **백오프 전략**: Exponential Backoff (1초 → 2초 → 4초)
+- **재시도 가능 예외**: IllegalStateException, RuntimeException
+- **즉시 DLT 전송 예외**: IllegalArgumentException
+- **DLT 처리**: 수동 처리, 알림, 모니터링 시스템 연동
+
+**핵심 사항**:
+- 직렬화: Spring Kafka JsonSerializer (Spring Boot auto-configuration 사용)
+- 이벤트: OrderCreatedEvent (orderId, productId, quantity, price, customerId)
+- Topic: `order-created` (메인), `order-created.DLT` (Dead Letter Topic)
+- Consumer Group: `product-service-group`
+- 테스트 가이드: `product/KAFKA_RETRY_TEST_GUIDE.md` 참조
+
+**Spring Boot 4.0 설정 방식**:
+- `JsonSerializer` 직접 사용 대신 application.yml 설정 사용
+- Spring Boot auto-configuration으로 KafkaTemplate, ConsumerFactory 자동 생성
+- 커스텀 ErrorHandler만 Bean으로 등록하여 재시도 로직 적용
 
 ### 데이터베이스 스키마
 
@@ -203,7 +252,9 @@ Product Service는 gRPC Status 코드 사용:
 3. Order Service → Order 엔티티 생성 (PENDING 상태)
 4. Order Service → gRPC `decreaseStock()` → Product Service (분산락 적용)
 5. Order Service → Order 상태를 CONFIRMED로 변경
-6. Product Service → Redis Pub/Sub 이벤트 발행 (재고 차감, 재고 부족 경고, 재고 소진)
+6. **Order Service → Kafka 이벤트 발행** (`order-created` 토픽)
+7. Product Service → Redis Pub/Sub 이벤트 발행 (재고 차감, 재고 부족 경고, 재고 소진)
+8. **Product Service → Kafka 이벤트 소비** (비즈니스 로직 처리, 재시도 로직 적용)
 
 ### 기술 스택
 - **언어**: Kotlin 2.2.21
@@ -212,6 +263,7 @@ Product Service는 gRPC Status 코드 사용:
 - **데이터베이스**: MySQL 8 + Flyway 마이그레이션
 - **캐시/락**: Redis + Redisson
 - **gRPC**: io.grpc + Protocol Buffers (proto3)
+- **메시징**: Kafka (Spring Kafka with auto-configuration)
 - **빌드**: Gradle (Kotlin DSL)
 
 ## 자주 발생하는 문제
@@ -231,6 +283,17 @@ Product Service는 실행되지만 gRPC 포트 8091이 리스닝하지 않는 �
 - Product: `jdbc:mysql://localhost:3306/product`
 - Order: `jdbc:mysql://localhost:3306/orders`
 
+### Kafka 연결 실패
+Order/Product Service가 시작 시 Kafka에 연결하지 못하는 경우:
+- Kafka가 실행 중인지 확인: `docker ps | grep kafka`
+- Kafka 로그 확인: `docker logs kafka`
+- application.yml의 `spring.kafka.bootstrap-servers` 확인 (기본값: localhost:9092)
+
+### Kafka 재시도 로직 테스트
+- 테스트 가이드: `product/KAFKA_RETRY_TEST_GUIDE.md` 참조
+- Kafka Console Producer로 수동 메시지 발행 가능
+- DLT 메시지는 `order-created.DLT` 토픽에서 확인
+
 ## 프로젝트 구조
 ```
 toy-server/
@@ -241,16 +304,18 @@ toy-server/
 │
 ├── product/                    # 상품 및 재고 서비스
 │   ├── build.gradle           # implementation project(':product-api')
+│   ├── KAFKA_RETRY_TEST_GUIDE.md  # Kafka 재시도 로직 테스트 가이드
 │   ├── src/main/kotlin/
-│   │   ├── config/            # GrpcServerConfig, RedisPubSubConfig, JpaConfig
+│   │   ├── config/            # GrpcServerConfig, RedisPubSubConfig, KafkaConsumerConfig
 │   │   ├── controller/        # ProductRestController (REST API)
 │   │   ├── dto/               # ProductRestDto (REST 요청/응답)
 │   │   ├── exception/         # RestExceptionHandler
 │   │   ├── grpc/              # ProductGrpcService (서버 구현)
 │   │   ├── service/           # ProductStockService (@DistributedLock 적용)
-│   │   ├── event/             # StockEventPublisher/Subscriber
+│   │   ├── event/             # StockEventPublisher/Subscriber, OrderEventConsumer (Kafka)
 │   │   └── persistence/       # JPA 엔티티, Repository
 │   ├── src/main/resources/
+│   │   ├── application.yml    # kafka.consumer 설정 포함
 │   │   └── db/migration/      # Flyway SQL 스크립트
 │   └── src/test/kotlin/
 │       └── performance/       # GrpcVsRestPerformanceTest, 성능 측정 인프라
@@ -261,12 +326,13 @@ toy-server/
     │   ├── client/            # ProductRestClient (REST 클라이언트)
     │   ├── config/            # RestClientConfig
     │   ├── dto/               # ProductRestDto (REST 요청/응답)
+    │   ├── event/             # OrderEventPublisher (Kafka), OrderCreatedEvent
     │   ├── grpc/              # ProductGrpcClient (클라이언트 구현)
-    │   ├── service/           # OrderService (gRPC/REST로 Product 호출)
+    │   ├── service/           # OrderService (gRPC/REST + Kafka 이벤트 발행)
     │   ├── controller/        # REST API
     │   └── persistence/       # Order, OrderItem 엔티티
     └── src/main/resources/
-        ├── application.yml    # rest.client.product-service.url 설정 포함
+        ├── application.yml    # kafka.producer 설정 포함
         └── db/migration/      # Flyway SQL 스크립트
 ```
 

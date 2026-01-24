@@ -6,6 +6,8 @@ import study.min.order.dto.CreateOrderRequest
 import study.min.order.dto.OrderItemResponse
 import study.min.order.dto.OrderResponse
 import study.min.order.dto.ProductResponse
+import study.min.order.event.OrderCreatedEvent
+import study.min.order.event.OrderEventPublisher
 import study.min.order.exception.AppException
 import study.min.order.exception.AppExceptionCode
 import study.min.order.grpc.ProductGrpcClient
@@ -19,7 +21,8 @@ import java.time.LocalDateTime
 @Service
 class OrderService(
     private val orderRepository: OrderRepository,
-    private val productGrpcClient: ProductGrpcClient
+    private val productGrpcClient: ProductGrpcClient,
+    private val orderEventPublisher: OrderEventPublisher
 ) {
 
     /**
@@ -71,6 +74,17 @@ class OrderService(
 
         // 6. 주문 확정
         savedOrder.status = OrderStatus.CONFIRMED
+
+        // 7. Kafka 이벤트 발행
+        val orderCreatedEvent = OrderCreatedEvent(
+            orderId = savedOrder.orderNumber,
+            productId = request.productId,
+            quantity = request.quantity,
+            price = product.price,
+            customerId = request.userId
+        )
+        orderEventPublisher.publishOrderCreated(orderCreatedEvent)
+        println("📤 [Order] Kafka 이벤트 발행 완료 - ${savedOrder.orderNumber}")
 
         return OrderResponse(
             id = savedOrder.id!!,
