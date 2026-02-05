@@ -2,10 +2,10 @@ spring:
   application:
     name: order
 
-  # Database
+  # Database (AlloyDB / PostgreSQL)
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/orders?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/orders
     username: kimmin2300
     password: kimmin2300
     hikari:
@@ -24,7 +24,7 @@ spring:
       hibernate:
         format_sql: true
         show_sql: false
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         default_batch_fetch_size: 100
 
   # Flyway

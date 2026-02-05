@@ -81,7 +81,7 @@ class OrderService(
             productId = request.productId,
             quantity = request.quantity,
             price = product.price,
-            customerId = request.userId
+            customerId = request.userId.toString()
         )
         orderEventPublisher.publishOrderCreated(orderCreatedEvent)
         println("📤 [Order] Kafka 이벤트 발행 완료 - ${savedOrder.orderNumber}")

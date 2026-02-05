@@ -11,7 +11,7 @@ import study.min.order.dto.*
  */
 @Component
 class ProductRestClient(
-    private val productRestClient: RestClient
+    private val productServiceRestClient: RestClient
 ) {
 
     /**
@@ -19,7 +19,7 @@ class ProductRestClient(
      * POST /api/products/stock/check
      */
     fun checkStock(productId: Long, quantity: Int): CheckStockRestResponse {
-        return productRestClient.post()
+        return productServiceRestClient.post()
             .uri("/api/products/stock/check")
             .body(CheckStockRestRequest(productId, quantity))
             .retrieve()
@@ -32,7 +32,7 @@ class ProductRestClient(
      * GET /api/products/{productId}
      */
     fun getProduct(productId: Long): GetProductRestResponse {
-        return productRestClient.get()
+        return productServiceRestClient.get()
             .uri("/api/products/{id}", productId)
             .retrieve()
             .body(GetProductRestResponse::class.java)
@@ -44,7 +44,7 @@ class ProductRestClient(
      * POST /api/products/{productId}/stock/decrease
      */
     fun decreaseStock(productId: Long, quantity: Int, orderId: String): DecreaseStockRestResponse {
-        return productRestClient.post()
+        return productServiceRestClient.post()
             .uri("/api/products/{id}/stock/decrease", productId)
             .body(DecreaseStockRestRequest(quantity, orderId))
             .retrieve()

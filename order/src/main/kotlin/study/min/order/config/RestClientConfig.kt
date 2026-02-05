@@ -17,7 +17,7 @@ import org.springframework.web.client.RestClient
 class RestClientConfig {
 
     @Bean
-    fun productRestClient(
+    fun productServiceRestClient(
         @Value("\${rest.client.product-service.url}") baseUrl: String
     ): RestClient {
         return RestClient.builder()
