@@ -33,7 +33,7 @@ class KafkaConsumerConfig {
         kafkaTemplate: KafkaTemplate<String, Any>
     ): ConcurrentKafkaListenerContainerFactory<String, Any> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
-        factory.consumerFactory = consumerFactory
+        factory.setConsumerFactory(consumerFactory)
         factory.setCommonErrorHandler(errorHandler(kafkaTemplate))
         return factory
     }

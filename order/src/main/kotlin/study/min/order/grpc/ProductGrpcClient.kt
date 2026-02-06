@@ -3,6 +3,8 @@ package study.min.order.grpc
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusRuntimeException
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import org.springframework.beans.factory.annotation.Value
@@ -18,11 +20,19 @@ class ProductGrpcClient(
     @Value("\${grpc.client.product-service.host:localhost}")
     private val host: String,
     @Value($$"${grpc.client.product-service.port:8091}")
-    private val port: Int
+    private val port: Int,
+    private val meterRegistry: MeterRegistry
 ) {
 
     private lateinit var channel: ManagedChannel
     private lateinit var productServiceStub: ProductServiceGrpc.ProductServiceBlockingStub
+
+    private fun grpcTimer(method: String): Timer =
+        Timer.builder("grpc.client.duration")
+            .tag("method", method)
+            .description("gRPC client call duration")
+            .publishPercentiles(0.5, 0.95, 0.99)
+            .register(meterRegistry)
 
     @PostConstruct
     fun init() {
@@ -50,15 +60,17 @@ class ProductGrpcClient(
             .setQuantity(quantity)
             .build()
 
-        return try {
-            println("🔗 [gRPC Client] CheckStock 요청 - productId=$productId, quantity=$quantity")
-            val response = productServiceStub.checkStock(request)
-            println("✅ [gRPC Client] CheckStock 응답 - available=${response.available}, stock=${response.currentStock}")
-            response
-        } catch (e: StatusRuntimeException) {
-            println("❌ [gRPC Client] CheckStock 실패: ${e.status}")
-            throw RuntimeException("재고 확인 실패: ${e.status.description}", e)
-        }
+        return grpcTimer("checkStock").record<CheckStockResponse> {
+            try {
+                println("🔗 [gRPC Client] CheckStock 요청 - productId=$productId, quantity=$quantity")
+                val response = productServiceStub.checkStock(request)
+                println("✅ [gRPC Client] CheckStock 응답 - available=${response.available}, stock=${response.currentStock}")
+                response
+            } catch (e: StatusRuntimeException) {
+                println("❌ [gRPC Client] CheckStock 실패: ${e.status}")
+                throw RuntimeException("재고 확인 실패: ${e.status.description}", e)
+            }
+        }!!
     }
 
     /**
@@ -71,15 +83,17 @@ class ProductGrpcClient(
             .setOrderId(orderId)
             .build()
 
-        return try {
-            println("🔗 [gRPC Client] DecreaseStock 요청 - productId=$productId, quantity=$quantity, orderId=$orderId")
-            val response = productServiceStub.decreaseStock(request)
-            println("✅ [gRPC Client] DecreaseStock 응답 - success=${response.success}, remaining=${response.remainingStock}")
-            response
-        } catch (e: StatusRuntimeException) {
-            println("❌ [gRPC Client] DecreaseStock 실패: ${e.status}")
-            throw RuntimeException("재고 차감 실패: ${e.status.description}", e)
-        }
+        return grpcTimer("decreaseStock").record<DecreaseStockResponse> {
+            try {
+                println("🔗 [gRPC Client] DecreaseStock 요청 - productId=$productId, quantity=$quantity, orderId=$orderId")
+                val response = productServiceStub.decreaseStock(request)
+                println("✅ [gRPC Client] DecreaseStock 응답 - success=${response.success}, remaining=${response.remainingStock}")
+                response
+            } catch (e: StatusRuntimeException) {
+                println("❌ [gRPC Client] DecreaseStock 실패: ${e.status}")
+                throw RuntimeException("재고 차감 실패: ${e.status.description}", e)
+            }
+        }!!
     }
 
     /**
@@ -92,15 +106,17 @@ class ProductGrpcClient(
             .setReason(reason)
             .build()
 
-        return try {
-            println("🔗 [gRPC Client] IncreaseStock 요청 - productId=$productId, quantity=$quantity, reason=$reason")
-            val response = productServiceStub.increaseStock(request)
-            println("✅ [gRPC Client] IncreaseStock 응답 - success=${response.success}, remaining=${response.remainingStock}")
-            response
-        } catch (e: StatusRuntimeException) {
-            println("❌ [gRPC Client] IncreaseStock 실패: ${e.status}")
-            throw RuntimeException("재고 증가 실패: ${e.status.description}", e)
-        }
+        return grpcTimer("increaseStock").record<IncreaseStockResponse> {
+            try {
+                println("🔗 [gRPC Client] IncreaseStock 요청 - productId=$productId, quantity=$quantity, reason=$reason")
+                val response = productServiceStub.increaseStock(request)
+                println("✅ [gRPC Client] IncreaseStock 응답 - success=${response.success}, remaining=${response.remainingStock}")
+                response
+            } catch (e: StatusRuntimeException) {
+                println("❌ [gRPC Client] IncreaseStock 실패: ${e.status}")
+                throw RuntimeException("재고 증가 실패: ${e.status.description}", e)
+            }
+        }!!
     }
 
     /**
@@ -111,15 +127,17 @@ class ProductGrpcClient(
             .setProductId(productId)
             .build()
 
-        return try {
-            println("🔗 [gRPC Client] GetProduct 요청 - productId=$productId")
-            val response = productServiceStub.getProduct(request)
-            println("✅ [gRPC Client] GetProduct 응답 - name=${response.name}, price=${response.price}, stock=${response.stock}")
-            response
-        } catch (e: StatusRuntimeException) {
-            println("❌ [gRPC Client] GetProduct 실패: ${e.status}")
-            throw RuntimeException("상품 조회 실패: ${e.status.description}", e)
-        }
+        return grpcTimer("getProduct").record<GetProductResponse> {
+            try {
+                println("🔗 [gRPC Client] GetProduct 요청 - productId=$productId")
+                val response = productServiceStub.getProduct(request)
+                println("✅ [gRPC Client] GetProduct 응답 - name=${response.name}, price=${response.price}, stock=${response.stock}")
+                response
+            } catch (e: StatusRuntimeException) {
+                println("❌ [gRPC Client] GetProduct 실패: ${e.status}")
+                throw RuntimeException("상품 조회 실패: ${e.status.description}", e)
+            }
+        }!!
     }
 
     /**
@@ -130,14 +148,16 @@ class ProductGrpcClient(
             .addAllProductIds(productIds)
             .build()
 
-        return try {
-            println("🔗 [gRPC Client] GetProducts 요청 - productIds=$productIds")
-            val response = productServiceStub.getProducts(request)
-            println("✅ [gRPC Client] GetProducts 응답 - 조회된 상품 수=${response.productsCount}")
-            response
-        } catch (e: StatusRuntimeException) {
-            println("❌ [gRPC Client] GetProducts 실패: ${e.status}")
-            throw RuntimeException("상품 목록 조회 실패: ${e.status.description}", e)
-        }
+        return grpcTimer("getProducts").record<GetProductsResponse> {
+            try {
+                println("🔗 [gRPC Client] GetProducts 요청 - productIds=$productIds")
+                val response = productServiceStub.getProducts(request)
+                println("✅ [gRPC Client] GetProducts 응답 - 조회된 상품 수=${response.productsCount}")
+                response
+            } catch (e: StatusRuntimeException) {
+                println("❌ [gRPC Client] GetProducts 실패: ${e.status}")
+                throw RuntimeException("상품 목록 조회 실패: ${e.status.description}", e)
+            }
+        }!!
     }
 }

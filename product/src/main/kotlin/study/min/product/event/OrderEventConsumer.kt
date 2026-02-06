@@ -104,12 +104,13 @@ class OrderEventConsumer(
 
         // 예시: 재고 상태 확인
         val stock = productStockService.getStock(event.productId)
-        log.info("📦 [Kafka Consumer] Current stock after order: productId=${event.productId}, stock=${stock.quantity}")
+        val currentQuantity = stock.quantity ?: 0
+        log.info("📦 [Kafka Consumer] Current stock after order: productId=${event.productId}, stock=$currentQuantity")
 
         // 추가 비즈니스 로직 (분석, 알림, 외부 시스템 연동 등)
         // 예: 재고가 특정 수준 이하로 떨어지면 알림
-        if (stock.quantity < 10) {
-            log.warn("⚠️ [Kafka Consumer] Low stock alert: productId=${event.productId}, stock=${stock.quantity}")
+        if (currentQuantity < 10) {
+            log.warn("⚠️ [Kafka Consumer] Low stock alert: productId=${event.productId}, stock=$currentQuantity")
         }
     }
 

@@ -1,0 +1,248 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Order Service - Health Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Order Service Status",
+      "targets": [{ "expr": "up{job=\"order-service\"}", "legendFormat": "Status" }],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Request Rate",
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{job=\"order-service\"}[1m]))", "legendFormat": "req/s" }],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] } }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Error Rate (5xx)",
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{job=\"order-service\", status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"order-service\"}[5m]))", "legendFormat": "error rate" }],
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] } }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Avg Response Time",
+      "targets": [{ "expr": "rate(http_server_requests_seconds_sum{job=\"order-service\"}[5m]) / rate(http_server_requests_seconds_count{job=\"order-service\"}[5m])", "legendFormat": "avg" }],
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "HTTP Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "title": "HTTP Request Rate by URI",
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{job=\"order-service\"}[1m])) by (uri, method)", "legendFormat": "{{method}} {{uri}}" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "title": "HTTP Response Time (P50, P95, P99)",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"order-service\"}[5m])) by (le))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"order-service\"}[5m])) by (le))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"order-service\"}[5m])) by (le))", "legendFormat": "P99" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "Order Business Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "lineWidth": 2, "fillOpacity": 15 } } },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "id": 20,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Order Creation Rate (success/failure)",
+      "targets": [
+        { "expr": "rate(order_create_success_total{job=\"order-service\"}[1m])", "legendFormat": "success" },
+        { "expr": "rate(order_create_failure_total{job=\"order-service\"}[1m])", "legendFormat": "failure" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 15 } } },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "Order Creation Duration",
+      "targets": [
+        { "expr": "rate(order_create_duration_seconds_sum{job=\"order-service\"}[5m]) / rate(order_create_duration_seconds_count{job=\"order-service\"}[5m])", "legendFormat": "avg" },
+        { "expr": "histogram_quantile(0.95, rate(order_create_duration_seconds_bucket{job=\"order-service\"}[5m]))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, rate(order_create_duration_seconds_bucket{job=\"order-service\"}[5m]))", "legendFormat": "P99" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 15 } } },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "id": 22,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "title": "Total Orders (success / failure)",
+      "targets": [
+        { "expr": "order_create_success_total{job=\"order-service\"}", "legendFormat": "success" },
+        { "expr": "order_create_failure_total{job=\"order-service\"}", "legendFormat": "failure" }
+      ],
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "title": "gRPC Client Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 30,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "title": "gRPC Call Duration by Method",
+      "targets": [
+        { "expr": "rate(grpc_client_duration_seconds_sum{job=\"order-service\"}[5m]) / rate(grpc_client_duration_seconds_count{job=\"order-service\"}[5m])", "legendFormat": "avg {{method}}" },
+        { "expr": "histogram_quantile(0.99, sum(rate(grpc_client_duration_seconds_bucket{job=\"order-service\"}[5m])) by (le, method))", "legendFormat": "P99 {{method}}" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 31,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "title": "gRPC Call Rate by Method",
+      "targets": [
+        { "expr": "sum(rate(grpc_client_duration_seconds_count{job=\"order-service\"}[1m])) by (method)", "legendFormat": "{{method}}" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 104,
+      "title": "JVM Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 20 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "id": 40,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "JVM Heap Memory",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\", job=\"order-service\"}", "legendFormat": "used" },
+        { "expr": "jvm_memory_committed_bytes{area=\"heap\", job=\"order-service\"}", "legendFormat": "committed" },
+        { "expr": "jvm_memory_max_bytes{area=\"heap\", job=\"order-service\"}", "legendFormat": "max" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 41,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "JVM Threads",
+      "targets": [
+        { "expr": "jvm_threads_live_threads{job=\"order-service\"}", "legendFormat": "live" },
+        { "expr": "jvm_threads_peak_threads{job=\"order-service\"}", "legendFormat": "peak" },
+        { "expr": "jvm_threads_daemon_threads{job=\"order-service\"}", "legendFormat": "daemon" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "id": 42,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "title": "GC Pause Rate",
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_sum{job=\"order-service\"}[5m])", "legendFormat": "{{action}} {{cause}}" }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 0.8 }] } } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "id": 43,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal" },
+      "title": "CPU Usage",
+      "targets": [
+        { "expr": "process_cpu_usage{job=\"order-service\"}", "legendFormat": "order-service" }
+      ],
+      "type": "gauge"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["order-service", "spring-boot", "monitoring"],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "Asia/Seoul",
+  "title": "Order Service Dashboard",
+  "uid": "order-service-main",
+  "version": 1
+}

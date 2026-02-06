@@ -10,6 +10,7 @@ import study.min.product.event.StockEventPublisher
 import study.min.product.event.StockIncreasedEvent
 import study.min.product.event.StockLowWarningEvent
 import study.min.product.event.StockOutEvent
+import study.min.product.persistence.product.ProductStock
 import study.min.product.persistence.product.ProductStockRepository
 import study.min.product.persistence.product.getByProductId
 
@@ -67,6 +68,14 @@ class ProductStockService(
                 )
             )
         }
+    }
+
+    /**
+     * 재고 조회
+     */
+    @Transactional(readOnly = true)
+    fun getStock(productId: Long): ProductStock {
+        return productStockRepository.getByProductId(productId)
     }
 
     /**

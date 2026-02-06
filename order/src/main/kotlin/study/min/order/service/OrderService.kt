@@ -1,5 +1,8 @@
 package study.min.order.service
 
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import study.min.order.dto.CreateOrderRequest
@@ -22,15 +25,44 @@ import java.time.LocalDateTime
 class OrderService(
     private val orderRepository: OrderRepository,
     private val productGrpcClient: ProductGrpcClient,
-    private val orderEventPublisher: OrderEventPublisher
+    private val orderEventPublisher: OrderEventPublisher,
+    private val meterRegistry: MeterRegistry
 ) {
+
+    private val orderCreateSuccessCounter: Counter by lazy {
+        Counter.builder("order.create.success")
+            .description("Successfully created orders")
+            .register(meterRegistry)
+    }
+
+    private val orderCreateFailureCounter: Counter by lazy {
+        Counter.builder("order.create.failure")
+            .description("Failed order creations")
+            .register(meterRegistry)
+    }
+
+    private val orderCreateTimer: Timer by lazy {
+        Timer.builder("order.create.duration")
+            .description("Order creation duration")
+            .publishPercentiles(0.5, 0.95, 0.99)
+            .register(meterRegistry)
+    }
 
     /**
      * 주문 생성
      * - gRPC로 재고 확인 및 차감
      */
     @Transactional
-    fun createOrder(request: CreateOrderRequest): OrderResponse {
+    fun createOrder(request: CreateOrderRequest): OrderResponse = orderCreateTimer.record<OrderResponse> {
+        try {
+            doCreateOrder(request).also { orderCreateSuccessCounter.increment() }
+        } catch (e: Exception) {
+            orderCreateFailureCounter.increment()
+            throw e
+        }
+    }!!
+
+    private fun doCreateOrder(request: CreateOrderRequest): OrderResponse {
         println("🛒 [Order] 주문 생성 시작 - userId=${request.userId}, productId=${request.productId}, quantity=${request.quantity}")
 
         // 1. gRPC로 재고 확인

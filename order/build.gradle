@@ -69,6 +69,10 @@ dependencies {
     // BigQuery //
     implementation 'com.google.cloud:google-cloud-bigquery:2.49.0'
 
+    // Monitoring //
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     // Lombok //
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

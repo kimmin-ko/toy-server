@@ -1,0 +1,79 @@
+groups:
+  - name: service-health
+    rules:
+      # 서비스 다운 감지
+      - alert: OrderServiceDown
+        expr: up{job="order-service"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Order Service가 다운되었습니다"
+          description: "{{ $labels.instance }}가 30초 이상 응답하지 않습니다."
+
+      # HTTP 에러율 5% 초과
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="order-service", status=~"5.."}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{job="order-service"}[5m]))
+          > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order Service HTTP 에러율이 5%를 초과했습니다"
+          description: "현재 에러율: {{ $value | humanizePercentage }}"
+
+      # 응답 시간 P99 > 3초
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job="order-service"}[5m])) by (le))
+          > 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order Service P99 응답 시간이 3초를 초과했습니다"
+          description: "P99 latency: {{ $value }}s"
+
+  - name: jvm-health
+    rules:
+      # JVM 힙 메모리 사용률 80% 초과
+      - alert: HighHeapUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap", job="order-service"}
+          /
+          jvm_memory_max_bytes{area="heap", job="order-service"}
+          > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order Service JVM 힙 메모리 사용률이 80%를 초과했습니다"
+
+  - name: business-metrics
+    rules:
+      # 주문 실패율 증가
+      - alert: HighOrderFailureRate
+        expr: |
+          rate(order_create_failure_total[5m])
+          /
+          (rate(order_create_success_total[5m]) + rate(order_create_failure_total[5m]))
+          > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "주문 실패율이 10%를 초과했습니다"
+
+      # 주문 처리 시간 P99 > 5초
+      - alert: SlowOrderProcessing
+        expr: |
+          histogram_quantile(0.99, rate(order_create_duration_seconds_bucket[5m]))
+          > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "주문 처리 P99가 5초를 초과했습니다"
