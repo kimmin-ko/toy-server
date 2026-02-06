@@ -66,17 +66,20 @@ dependencies {
     // Kafka //
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
 
+    // BigQuery //
+    implementation 'com.google.cloud:google-cloud-bigquery:2.49.0'
+
     // Lombok //
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
     // Test //
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation 'org.testcontainers:testcontainers-kafka'
-    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:kafka:1.20.4'
+    testImplementation 'org.testcontainers:postgresql:1.20.4'
+    testImplementation 'org.testcontainers:junit-jupiter:1.20.4'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
     testImplementation 'org.springframework.grpc:spring-grpc-test'
-    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'

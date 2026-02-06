@@ -86,6 +86,14 @@ rest:
     product-service:
       url: http://localhost:8081
 
+# BigQuery (Emulator)
+bigquery:
+  project-id: test-project
+  dataset: test_dataset
+  emulator:
+    host: localhost
+    port: 9050
+
 # Logging
 logging:
   level:
