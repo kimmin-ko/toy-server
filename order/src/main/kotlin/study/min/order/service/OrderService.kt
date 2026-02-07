@@ -233,8 +233,9 @@ class OrderService(
      */
     private fun generateOrderNumber(): String {
         val timestamp = LocalDateTime.now()
+        val uuid = java.util.UUID.randomUUID().toString().substring(0, 8)
         return "ORDER-${timestamp.year}${
             timestamp.monthValue.toString().padStart(2, '0')
-        }${timestamp.dayOfMonth.toString().padStart(2, '0')}-${System.currentTimeMillis()}"
+        }${timestamp.dayOfMonth.toString().padStart(2, '0')}-${System.currentTimeMillis()}-$uuid"
     }
 }
