@@ -9,8 +9,8 @@ spring:
     username: kimmin2300
     password: kimmin2300
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
+      maximum-pool-size: 150
+      minimum-idle: 10
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -63,12 +63,9 @@ spring:
     consumer:
       group-id: product-service-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
       enable-auto-commit: false
-      properties:
-        spring.json.trusted.packages: "study.min.order.event,study.min.product.event"
-        spring.json.value.default.type: "study.min.product.event.OrderCreatedEvent"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

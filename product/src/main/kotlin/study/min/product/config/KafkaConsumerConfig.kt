@@ -1,5 +1,7 @@
 package study.min.product.config
 
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Bean
@@ -10,6 +12,7 @@ import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.CommonErrorHandler
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
 import org.springframework.kafka.listener.DefaultErrorHandler
+import org.springframework.kafka.support.converter.StringJsonMessageConverter
 import org.springframework.util.backoff.ExponentialBackOff
 
 /**
@@ -32,9 +35,11 @@ class KafkaConsumerConfig {
         consumerFactory: ConsumerFactory<String, Any>,
         kafkaTemplate: KafkaTemplate<String, Any>
     ): ConcurrentKafkaListenerContainerFactory<String, Any> {
+        val objectMapper = jacksonObjectMapper().registerModule(JavaTimeModule())
         val factory = ConcurrentKafkaListenerContainerFactory<String, Any>()
         factory.setConsumerFactory(consumerFactory)
         factory.setCommonErrorHandler(errorHandler(kafkaTemplate))
+        factory.setRecordMessageConverter(StringJsonMessageConverter(objectMapper))
         return factory
     }
 
