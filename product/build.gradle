@@ -32,7 +32,7 @@ ext {
 
 dependencies {
     // gRPC API //
-    implementation project(':product-api')
+    implementation project(':product-grpc')
 
     // Web //
     implementation 'io.grpc:grpc-services'

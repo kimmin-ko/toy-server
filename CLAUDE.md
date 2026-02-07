@@ -59,8 +59,8 @@ CREATE DATABASE orders;
 # 테스트 제외 빌드
 ./gradlew build -x test
 
-# Proto 파일에서 gRPC 코드 생성 (product-api 모듈에서 관리)
-./gradlew :product-api:generateProto
+# Proto 파일에서 gRPC 코드 생성 (product-grpc 모듈에서 관리)
+./gradlew :product-grpc:generateProto
 ```
 
 ### 서비스 실행
@@ -113,15 +113,15 @@ Order Service (Client)  ──gRPC/REST──>  Product Service (Server)
 - 두 서비스 모두 Flyway 마이그레이션 사용 (`src/main/resources/db/migration/`)
 
 ### gRPC 구현 방식
-- **Proto 파일**: `product-api/src/main/proto/product_service.proto` (별도 모듈로 분리)
-- **product-api 모듈**: Proto 파일과 생성된 gRPC 스텁 코드를 포함하는 공유 라이브러리
+- **Proto 파일**: `product-grpc/src/main/proto/product_service.proto` (별도 모듈로 분리)
+- **product-grpc 모듈**: Proto 파일과 생성된 gRPC 스텁 코드를 포함하는 공유 라이브러리
 - **Product Service**: `ProductServiceGrpc.ProductServiceImplBase`를 상속하고 `@Component`로 등록
 - **수동 gRPC 서버**: `GrpcServerConfig.kt`에서 8091 포트로 수동 시작 (Spring gRPC auto-config이 Spring Boot 4.0.1에서 작동하지 않음)
 - **Order Service**: `ManagedChannel`로 Product gRPC 서버 연결
 
 **Proto 파일 변경 시**:
-1. `product-api/src/main/proto/product_service.proto` 수정
-2. `./gradlew :product-api:generateProto` 실행
+1. `product-grpc/src/main/proto/product_service.proto` 수정
+2. `./gradlew :product-grpc:generateProto` 실행
 3. product와 order 모듈 재빌드 (의존성으로 자동 반영)
 
 ### 분산락 패턴
