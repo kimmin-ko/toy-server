@@ -66,9 +66,6 @@ dependencies {
     // Kafka //
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
 
-    // BigQuery //
-    implementation 'com.google.cloud:google-cloud-bigquery:2.49.0'
-
     // Monitoring //
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
