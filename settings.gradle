@@ -11,3 +11,6 @@ include 'product-api'
 // MSA services
 include 'product'
 include 'order'
+
+// Load test
+include 'load-test'

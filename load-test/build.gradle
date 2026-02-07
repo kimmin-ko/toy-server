@@ -1,0 +1,69 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.2.21'
+}
+
+group = 'study.min'
+version = '0.0.1'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+def gatlingVersion = '3.13.5'
+
+dependencies {
+    implementation "io.gatling.highcharts:gatling-charts-highcharts:${gatlingVersion}"
+    implementation "io.gatling:gatling-core:${gatlingVersion}"
+    implementation "io.gatling:gatling-http:${gatlingVersion}"
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib'
+}
+
+// Gatling 시뮬레이션 실행 태스크
+tasks.register('gatlingRun', JavaExec) {
+    description = 'Run all Gatling simulations'
+    group = 'load test'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.gatling.app.Gatling'
+    args = [
+        '--results-folder', "${layout.buildDirectory.get()}/reports/gatling",
+        '--simulations-folder', 'src/main/kotlin',
+    ]
+    jvmArgs = [
+            '-Xmx1g',
+            '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+        ]
+}
+
+// 개별 시뮬레이션 실행 태스크 생성
+['OrderCreateSimulation', 'OrderGetSimulation', 'OrderMixedSimulation'].each { sim ->
+    tasks.register("gatlingRun${sim}", JavaExec) {
+        description = "Run ${sim}"
+        group = 'load test'
+        classpath = sourceSets.main.runtimeClasspath
+        mainClass = 'io.gatling.app.Gatling'
+        args = [
+            '--results-folder', "${layout.buildDirectory.get()}/reports/gatling",
+            '--simulation', "simulation.${sim}",
+        ]
+        jvmArgs = [
+            '-Xmx1g',
+            '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+        ]
+    }
+}

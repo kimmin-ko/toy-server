@@ -56,6 +56,7 @@ spring:
     virtual:
       enabled: true
 
+
   # Kafka
   kafka:
     bootstrap-servers: localhost:9092
@@ -82,7 +83,7 @@ server:
   port: 8081
   shutdown: graceful
 
-# gRPC
+# gRPC (수동 서버 설정 - GrpcServerConfig.kt에서 사용)
 grpc:
   server:
     port: 8091
