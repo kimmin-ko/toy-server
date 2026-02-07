@@ -3,19 +3,16 @@ package study.min.order.service
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import study.min.order.dto.CreateOrderRequest
 import study.min.order.dto.OrderItemResponse
 import study.min.order.dto.OrderResponse
 import study.min.order.dto.ProductResponse
-import study.min.order.event.OrderCreatedEvent
-import study.min.order.event.OrderEventPublisher
 import study.min.order.exception.AppException
 import study.min.order.exception.AppExceptionCode
 import study.min.order.grpc.ProductGrpcClient
 import study.min.order.persistence.*
-import java.time.LocalDateTime
 
 /**
  * 주문 서비스
@@ -24,10 +21,12 @@ import java.time.LocalDateTime
 @Service
 class OrderService(
     private val orderRepository: OrderRepository,
+    private val orderTransactionService: OrderTransactionService,
     private val productGrpcClient: ProductGrpcClient,
-    private val orderEventPublisher: OrderEventPublisher,
     private val meterRegistry: MeterRegistry
 ) {
+
+    private val log = LoggerFactory.getLogger(OrderService::class.java)
 
     private val orderCreateSuccessCounter: Counter by lazy {
         Counter.builder("order.create.success")
@@ -50,9 +49,14 @@ class OrderService(
 
     /**
      * 주문 생성
-     * - gRPC로 재고 확인 및 차감
+     *
+     * DB connection 점유 최소화를 위해 트랜잭션을 분리:
+     * 1. gRPC 조회 (트랜잭션 없음 - DB connection 불필요)
+     * 2. 주문 PENDING 저장 (짧은 트랜잭션 - OrderTransactionService)
+     * 3. gRPC 재고 차감 (트랜잭션 없음 - 분산락으로 오래 걸림)
+     * 4. 주문 CONFIRMED 업데이트 (짧은 트랜잭션 - OrderTransactionService)
+     * 5. 실패 시 FAILED 보상 처리
      */
-    @Transactional
     fun createOrder(request: CreateOrderRequest): OrderResponse = orderCreateTimer.record<OrderResponse> {
         try {
             doCreateOrder(request).also { orderCreateSuccessCounter.increment() }
@@ -63,67 +67,48 @@ class OrderService(
     }!!
 
     private fun doCreateOrder(request: CreateOrderRequest): OrderResponse {
-        println("🛒 [Order] 주문 생성 시작 - userId=${request.userId}, productId=${request.productId}, quantity=${request.quantity}")
+        log.info("[Order] 주문 생성 시작 - userId={}, productId={}, quantity={}", request.userId, request.productId, request.quantity)
 
-        // 1. gRPC로 재고 확인
+        // 1. gRPC로 재고 확인 (트랜잭션 밖 - DB connection 불필요)
         val stockResponse = productGrpcClient.checkStock(request.productId, request.quantity)
         if (!stockResponse.available) {
             throw AppException(AppExceptionCode.ORDER_01, "재고 부족: ${stockResponse.message}")
         }
-        println("✅ [Order] 재고 확인 완료 - 현재 재고: ${stockResponse.currentStock}개")
+        log.info("[Order] 재고 확인 완료 - 현재 재고: {}개", stockResponse.currentStock)
 
-        // 2. gRPC로 상품 정보 조회
+        // 2. gRPC로 상품 정보 조회 (트랜잭션 밖 - DB connection 불필요)
         val product = productGrpcClient.getProduct(request.productId)
-        println("✅ [Order] 상품 정보 조회 완료 - ${product.name}, ${product.price}원")
+        log.info("[Order] 상품 정보 조회 완료 - {}, {}원", product.name, product.price)
 
-        // 3. 주문 생성
-        val order = Order().apply {
-            this.orderNumber = generateOrderNumber()
-            this.userId = request.userId
-            this.status = OrderStatus.PENDING
+        // 3. 주문 PENDING 저장 (짧은 트랜잭션 - DB connection 수ms만 점유)
+        val savedOrder = orderTransactionService.savePendingOrder(request, product.price)
+        log.info("[Order] 주문 PENDING 저장 완료 - {}", savedOrder.orderNumber)
+
+        // 4. gRPC로 재고 차감 (트랜잭션 밖 - 분산락 대기 시간이 길어도 DB connection 점유 안 함)
+        try {
+            val decreaseResponse = productGrpcClient.decreaseStock(
+                request.productId,
+                request.quantity,
+                savedOrder.orderNumber
+            )
+            log.info("[Order] 재고 차감 완료 - 남은 재고: {}개", decreaseResponse.remainingStock)
+        } catch (e: Exception) {
+            // 재고 차감 실패 시 주문 FAILED 보상 처리
+            log.error("[Order] 재고 차감 실패 - {}", savedOrder.orderNumber, e)
+            orderTransactionService.updateOrderStatus(savedOrder.id!!, OrderStatus.FAILED)
+            throw e
         }
 
-        val orderItem = OrderItem().apply {
-            this.productId = request.productId
-            this.quantity = request.quantity
-            this.price = product.price
-        }
-
-        order.addOrderItem(orderItem)
-        order.calculateTotalPrice()
-
-        // 4. gRPC로 재고 차감
-        val decreaseResponse = productGrpcClient.decreaseStock(
-            request.productId,
-            request.quantity,
-            order.orderNumber
-        )
-        println("✅ [Order] 재고 차감 완료 - 남은 재고: ${decreaseResponse.remainingStock}개")
-
-        // 5. 주문 저장
-        val savedOrder = orderRepository.save(order)
-        println("✅ [Order] 주문 생성 완료 - ${savedOrder.orderNumber}")
-
-        // 6. 주문 확정
-        savedOrder.status = OrderStatus.CONFIRMED
-
-        // 7. Kafka 이벤트 발행
-        val orderCreatedEvent = OrderCreatedEvent(
-            orderId = savedOrder.orderNumber,
-            productId = request.productId,
-            quantity = request.quantity,
-            price = product.price,
-            customerId = request.userId.toString()
-        )
-        orderEventPublisher.publishOrderCreated(orderCreatedEvent)
-        println("📤 [Order] Kafka 이벤트 발행 완료 - ${savedOrder.orderNumber}")
+        // 5. 주문 CONFIRMED 업데이트 (짧은 트랜잭션)
+        orderTransactionService.updateOrderStatus(savedOrder.id!!, OrderStatus.CONFIRMED)
+        log.info("[Order] 주문 확정 완료 - {}", savedOrder.orderNumber)
 
         return OrderResponse(
             id = savedOrder.id!!,
             orderNumber = savedOrder.orderNumber,
             userId = savedOrder.userId,
             totalPrice = savedOrder.totalPrice,
-            status = savedOrder.status.name,
+            status = OrderStatus.CONFIRMED.name,
             items = listOf(
                 OrderItemResponse(
                     productId = request.productId,
@@ -139,38 +124,35 @@ class OrderService(
      * 주문 취소
      * - gRPC로 재고 복구
      */
-    @Transactional
     fun cancelOrder(orderId: Long): OrderResponse {
-        println("❌ [Order] 주문 취소 시작 - orderId=$orderId")
+        log.info("[Order] 주문 취소 시작 - orderId={}", orderId)
 
         val order = orderRepository.findById(orderId)
             .orElseThrow { IllegalArgumentException("주문을 찾을 수 없습니다: $orderId") }
 
         check(order.status != OrderStatus.CANCELLED) { "이미 취소된 주문입니다" }
 
-        // gRPC로 재고 복구
+        // gRPC로 재고 복구 (트랜잭션 밖)
         order.orderItems.forEach { item ->
             val increaseResponse = productGrpcClient.increaseStock(
                 item.productId,
                 item.quantity,
                 "주문 취소: ${order.orderNumber}"
             )
-            println("✅ [Order] 재고 복구 완료 - productId=${item.productId}, 현재 재고: ${increaseResponse.remainingStock}개")
+            log.info("[Order] 재고 복구 완료 - productId={}, 현재 재고: {}개", item.productId, increaseResponse.remainingStock)
         }
 
-        // 주문 상태 변경
-        order.status = OrderStatus.CANCELLED
-        val savedOrder = orderRepository.save(order)
-
-        println("✅ [Order] 주문 취소 완료 - ${savedOrder.orderNumber}")
+        // 주문 상태 변경 (짧은 트랜잭션)
+        orderTransactionService.updateOrderStatus(order.id!!, OrderStatus.CANCELLED)
+        log.info("[Order] 주문 취소 완료 - {}", order.orderNumber)
 
         return OrderResponse(
-            id = savedOrder.id!!,
-            orderNumber = savedOrder.orderNumber,
-            userId = savedOrder.userId,
-            totalPrice = savedOrder.totalPrice,
-            status = savedOrder.status.name,
-            items = savedOrder.orderItems.map { item ->
+            id = order.id!!,
+            orderNumber = order.orderNumber,
+            userId = order.userId,
+            totalPrice = order.totalPrice,
+            status = OrderStatus.CANCELLED.name,
+            items = order.orderItems.map { item ->
                 OrderItemResponse(
                     productId = item.productId,
                     productName = "상품",
@@ -184,10 +166,18 @@ class OrderService(
     /**
      * 주문 조회
      */
-    @Transactional(readOnly = true)
     fun getOrder(orderId: Long): OrderResponse {
         val order = orderRepository.findById(orderId)
             .orElseThrow { IllegalArgumentException("주문을 찾을 수 없습니다: $orderId") }
+
+        // gRPC로 상품 정보 일괄 조회 (트랜잭션 밖)
+        val productNames = order.orderItems.associate { item ->
+            item.productId to try {
+                productGrpcClient.getProduct(item.productId).name
+            } catch (_: Exception) {
+                "알 수 없음"
+            }
+        }
 
         return OrderResponse(
             id = order.id!!,
@@ -196,16 +186,9 @@ class OrderService(
             totalPrice = order.totalPrice,
             status = order.status.name,
             items = order.orderItems.map { item ->
-                // gRPC로 상품 정보 조회
-                val product = try {
-                    productGrpcClient.getProduct(item.productId)
-                } catch (e: Exception) {
-                    null
-                }
-
                 OrderItemResponse(
                     productId = item.productId,
-                    productName = product?.name ?: "알 수 없음",
+                    productName = productNames[item.productId] ?: "알 수 없음",
                     quantity = item.quantity,
                     price = item.price
                 )
@@ -226,16 +209,5 @@ class OrderService(
             stock = product.stock,
             available = product.available
         )
-    }
-
-    /**
-     * 주문 번호 생성
-     */
-    private fun generateOrderNumber(): String {
-        val timestamp = LocalDateTime.now()
-        val uuid = java.util.UUID.randomUUID().toString().substring(0, 8)
-        return "ORDER-${timestamp.year}${
-            timestamp.monthValue.toString().padStart(2, '0')
-        }${timestamp.dayOfMonth.toString().padStart(2, '0')}-${System.currentTimeMillis()}-$uuid"
     }
 }

@@ -60,5 +60,6 @@ class Order : BaseEntity() {
 enum class OrderStatus {
     PENDING,    // 대기 중
     CONFIRMED,  // 확정
-    CANCELLED   // 취소됨
+    CANCELLED,  // 취소됨
+    FAILED      // 실패
 }

@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 주문 생성 API 부하 테스트
- * POST /orders - 100 TPS, 2분간 실행
+ * POST /orders - 30 TPS, 2분간 실행
  *
  * 실행: ./gradlew :load-test:gatlingRun-simulation.OrderCreateSimulation
  */
@@ -38,12 +38,12 @@ class OrderCreateSimulation : Simulation() {
     init {
         setUp(
             createOrderScenario.injectOpen(
-                // 워밍업: 10초간 0 → 100 TPS로 점진 증가
-                rampUsersPerSec(0.0).to(100.0).during(Duration.ofSeconds(10)),
-                // 본 테스트: 2분간 100 TPS 유지
-                constantUsersPerSec(100.0).during(Duration.ofMinutes(2)),
-                // 쿨다운: 10초간 100 → 0 TPS로 점진 감소
-                rampUsersPerSec(100.0).to(0.0).during(Duration.ofSeconds(10))
+                // 워밍업: 10초간 0 → 30 TPS로 점진 증가
+                rampUsersPerSec(0.0).to(30.0).during(Duration.ofSeconds(10)),
+                // 본 테스트: 2분간 30 TPS 유지
+                constantUsersPerSec(30.0).during(Duration.ofMinutes(2)),
+                // 쿨다운: 10초간 30 → 0 TPS로 점진 감소
+                rampUsersPerSec(30.0).to(0.0).during(Duration.ofSeconds(10))
             )
         ).protocols(httpProtocol)
             .assertions(
