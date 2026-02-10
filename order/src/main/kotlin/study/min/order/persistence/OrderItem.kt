@@ -15,7 +15,7 @@ class OrderItem : BaseEntity() {
     var id: Long? = null
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false)
+    @JoinColumn(name = "order_id", nullable = false, foreignKey = ForeignKey(ConstraintMode.NO_CONSTRAINT))
     var order: Order? = null
 
     @Column(name = "product_id", nullable = false)
