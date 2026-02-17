@@ -16,6 +16,11 @@ spring:
               filters:
                 - name: RequestRateLimiter
                   args:
+                    # Token Bucket 알고리즘:
+                    # - 버킷에 최대 burstCapacity(20)개의 토큰 보유
+                    # - 요청마다 토큰 1개 소비, 토큰 없으면 429 반환
+                    # - 매초 replenishRate(10)개씩 토큰 보충
+                    # - 예: 순간 20개 요청 허용, 이후 초당 10개로 제한
                     redis-rate-limiter.replenishRate: 10
                     redis-rate-limiter.burstCapacity: 20
                     key-resolver: "#{@ipKeyResolver}"
@@ -42,6 +47,11 @@ spring:
       port: 6379
       username: kimmin2300
       password: kimmin2300
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG
 
 gateway:
   jwt:
