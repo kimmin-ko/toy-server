@@ -4,7 +4,6 @@ package study.min.order.dto
  * 주문 생성 요청 DTO
  */
 data class CreateOrderRequest(
-    val userId: Long,
     val productId: Long,
     val quantity: Int
 )

@@ -17,10 +17,10 @@ class OrderTransactionService(
 ) {
 
     @Transactional
-    fun savePendingOrder(request: CreateOrderRequest, price: Long): Order {
+    fun savePendingOrder(request: CreateOrderRequest, userId: Long, price: Long): Order {
         val order = Order().apply {
             this.orderNumber = generateOrderNumber()
-            this.userId = request.userId
+            this.userId = userId
             this.status = OrderStatus.PENDING
         }
 

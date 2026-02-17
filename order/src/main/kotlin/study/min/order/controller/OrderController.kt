@@ -20,11 +20,15 @@ class OrderController(
     /**
      * 주문 생성
      * POST /orders
+     * userId는 Gateway에서 JWT 검증 후 X-Auth-User 헤더로 전달
      */
     @PostMapping
-    fun createOrder(@RequestBody request: CreateOrderRequest): ResponseEntity<OrderResponse> {
+    fun createOrder(
+        @RequestBody request: CreateOrderRequest,
+        @RequestHeader("X-Auth-User") userId: String
+    ): ResponseEntity<OrderResponse> {
         return try {
-            val order = orderService.createOrder(request)
+            val order = orderService.createOrder(request, userId.toLong())
             ResponseEntity.ok(order)
         } catch (e: IllegalStateException) {
             ResponseEntity.badRequest().build()
@@ -33,7 +37,7 @@ class OrderController(
         }
     }
 
-    /**1
+    /**
      * 주문 조회
      * GET /orders/{orderId}
      */
@@ -64,7 +68,7 @@ class OrderController(
     }
 
     /**
-     * 상품 정보 조회 (gRPC 테스트용)
+     * 상품 정보 조회
      * GET /orders/products/{productId}
      */
     @GetMapping("/products/{productId}")

@@ -57,17 +57,17 @@ class OrderService(
      * 4. 주문 CONFIRMED 업데이트 (짧은 트랜잭션 - OrderTransactionService)
      * 5. 실패 시 FAILED 보상 처리
      */
-    fun createOrder(request: CreateOrderRequest): OrderResponse = orderCreateTimer.record<OrderResponse> {
+    fun createOrder(request: CreateOrderRequest, userId: Long): OrderResponse = orderCreateTimer.record<OrderResponse> {
         try {
-            doCreateOrder(request).also { orderCreateSuccessCounter.increment() }
+            doCreateOrder(request, userId).also { orderCreateSuccessCounter.increment() }
         } catch (e: Exception) {
             orderCreateFailureCounter.increment()
             throw e
         }
     }!!
 
-    private fun doCreateOrder(request: CreateOrderRequest): OrderResponse {
-        log.info("[Order] 주문 생성 시작 - userId={}, productId={}, quantity={}", request.userId, request.productId, request.quantity)
+    private fun doCreateOrder(request: CreateOrderRequest, userId: Long): OrderResponse {
+        log.info("[Order] 주문 생성 시작 - userId={}, productId={}, quantity={}", userId, request.productId, request.quantity)
 
         // 1. gRPC로 재고 확인 (트랜잭션 밖 - DB connection 불필요)
         val stockResponse = productGrpcClient.checkStock(request.productId, request.quantity)
@@ -81,7 +81,7 @@ class OrderService(
         log.info("[Order] 상품 정보 조회 완료 - {}, {}원", product.name, product.price)
 
         // 3. 주문 PENDING 저장 (짧은 트랜잭션 - DB connection 수ms만 점유)
-        val savedOrder = orderTransactionService.savePendingOrder(request, product.price)
+        val savedOrder = orderTransactionService.savePendingOrder(request, userId, product.price)
         log.info("[Order] 주문 PENDING 저장 완료 - {}", savedOrder.orderNumber)
 
         // 4. gRPC로 재고 차감 (트랜잭션 밖 - 분산락 대기 시간이 길어도 DB connection 점유 안 함)
