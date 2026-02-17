@@ -20,15 +20,15 @@ class OrderController(
     /**
      * 주문 생성
      * POST /orders
-     * userId는 Gateway에서 JWT 검증 후 X-Auth-User 헤더로 전달
+     * userId는 Gateway에서 JWT 검증 후 X-Auth-User-Id 헤더로 전달
      */
     @PostMapping
     fun createOrder(
         @RequestBody request: CreateOrderRequest,
-        @RequestHeader("X-Auth-User") userId: String
+        @RequestHeader("X-Auth-User-Id") userId: Long
     ): ResponseEntity<OrderResponse> {
         return try {
-            val order = orderService.createOrder(request, userId.toLong())
+            val order = orderService.createOrder(request, userId)
             ResponseEntity.ok(order)
         } catch (e: IllegalStateException) {
             ResponseEntity.badRequest().build()

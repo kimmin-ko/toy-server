@@ -1,6 +1,7 @@
 package study.min.gateway.filter;
 
 import io.jsonwebtoken.Claims;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -15,17 +16,15 @@ import study.min.gateway.jwt.JwtUtil;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final JwtUtil jwtUtil;
 
     private static final List<String> PUBLIC_PATHS = List.of(
-            "/auth/token"
+            "/auth/token",
+            "/auth/register"
     );
-
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
-    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -52,8 +51,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         String token = authHeader.substring(7);
         try {
             Claims claims = jwtUtil.validateToken(token);
+            Long userId = jwtUtil.extractUserId(claims);
             ServerHttpRequest mutatedRequest = request.mutate()
                     .header("X-Auth-User", claims.getSubject())
+                    .header("X-Auth-User-Id", String.valueOf(userId))
                     .build();
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
         } catch (Exception e) {

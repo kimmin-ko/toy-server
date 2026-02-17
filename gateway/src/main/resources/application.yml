@@ -41,6 +41,16 @@ spring:
               predicates:
                 - Path=/health
 
+  r2dbc:
+    url: r2dbc:mysql://localhost:3306/auth
+    username: kimmin2300
+    password: kimmin2300
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
   data:
     redis:
       host: localhost
