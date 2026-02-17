@@ -12,5 +12,8 @@ include 'product-grpc'
 include 'product'
 include 'order'
 
+// API Gateway
+include 'gateway'
+
 // Load test
 include 'load-test'

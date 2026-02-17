@@ -12,7 +12,7 @@ import study.min.order.service.OrderService
  * - gRPC 통신 테스트용
  */
 @RestController
-@RequestMapping("/orders")
+@RequestMapping("/api/orders")
 class OrderController(
     private val orderService: OrderService
 ) {
