@@ -19,18 +19,12 @@ repositories {
 }
 
 ext {
-    set('springCloudVersion', "2025.0.0")
-}
-
-// Gateway is WebFlux-only: globally exclude servlet dependencies
-configurations.configureEach {
-    exclude group: 'org.springframework', module: 'spring-webmvc'
-    exclude group: 'org.springframework.boot', module: 'spring-boot-starter-web'
+    set('springCloudVersion', "2025.1.1")
 }
 
 dependencies {
     // Gateway (WebFlux-based)
-    implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webflux'
 
     // Redis (Reactive, for Rate Limiting)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
