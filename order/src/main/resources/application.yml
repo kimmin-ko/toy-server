@@ -6,8 +6,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://localhost:5432/orders
-    username: kimmin2300
-    password: kimmin2300
+    username: test
+    password: test
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -40,8 +40,8 @@ spring:
     redis:
       host: localhost
       port: 6379
-      username: kimmin2300
-      password: kimmin2300
+      username: test
+      password: test
       timeout: 3000ms
       lettuce:
         pool:

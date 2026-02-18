@@ -5,9 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 프로젝트 개요
 
 Toy-server는 **마이크로서비스 아키텍처(MSA)** 학습용 프로젝트로, 이커머스 시스템을 구현합니다:
+- **Gateway Service**: API 게이트웨이 (JWT 인증, Redis 기반 Rate Limiting, 라우팅) — **Java**로 작성
 - **Product Service**: 상품 및 재고 관리 (분산락 적용)
 - **Order Service**: 주문 관리 (gRPC로 Product 서비스 호출, BigQuery 주문 분석)
-- **서비스 간 통신**: gRPC (동기 호출), REST API
+- **product-grpc**: Proto 파일 및 생성된 gRPC 스텁을 포함하는 공유 라이브러리 모듈
+- **load-test**: Gatling 부하 테스트 시뮬레이션 (Kotlin)
+- **monitoring**: Prometheus + Grafana 모니터링 스택
 - **이벤트 기반 아키텍처**:
   - Redis Pub/Sub (재고 변경 알림)
   - Kafka (주문 이벤트 발행/소비, 재시도 로직)
@@ -20,8 +23,8 @@ Toy-server는 **마이크로서비스 아키텍처(MSA)** 학습용 프로젝트
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 
 # 필수 서비스 실행 (Docker)
-docker run -d -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root mysql:8          # Product DB
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=root postgres:latest    # Order DB
+docker run -d -p 3306:3306 -e MYSQL_ROOT_PASSWORD=test mysql:8          # Product DB
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:latest    # Order DB
 docker run -d -p 6379:6379 redis
 
 # Kafka (주문 이벤트 메시징)
@@ -38,9 +41,13 @@ docker run -d --name kafka -p 9092:9092 \
 
 ### 데이터베이스 생성
 ```bash
-# Product DB (MySQL)
-mysql -u root -p
+# Product DB + Gateway Auth DB (MySQL)
+mysql -u root -ptest
 CREATE DATABASE product;
+CREATE DATABASE auth;
+CREATE USER 'test'@'%' IDENTIFIED BY 'test';
+GRANT ALL ON auth.* TO 'test'@'%';
+# gateway의 schema.sql이 기동 시 User 테이블 자동 생성
 
 # Order DB (PostgreSQL)
 psql -U postgres
@@ -65,13 +72,43 @@ CREATE DATABASE orders;
 
 ### 서비스 실행
 ```bash
-# Product 서비스 (터미널 1)
+# Gateway 서비스 (터미널 1) — auth DB 필요: MySQL의 `auth` 스키마 (schema.sql 자동 적용)
+./gradlew :gateway:bootRun
+# HTTP: localhost:8080
+
+# Product 서비스 (터미널 2)
 ./gradlew :product:bootRun
 # HTTP: localhost:8081, gRPC: localhost:8091
 
-# Order 서비스 (터미널 2)
+# Order 서비스 (터미널 3)
 ./gradlew :order:bootRun
 # HTTP: localhost:8082
+```
+
+### 부하 테스트 (Gatling)
+```bash
+# 전체 시뮬레이션 실행
+./gradlew :load-test:gatlingRun
+
+# 개별 시뮬레이션 실행
+./gradlew :load-test:gatlingRunOrderCreateSimulation
+./gradlew :load-test:gatlingRunOrderGetSimulation
+./gradlew :load-test:gatlingRunOrderMixedSimulation
+# 결과: load-test/build/reports/gatling/
+```
+
+### 모니터링 (Prometheus + Grafana)
+```bash
+# monitoring/ 디렉토리에서 실행
+docker run -d -p 9090:9090 \
+  -v $(pwd)/monitoring/prometheus:/etc/prometheus \
+  prom/prometheus
+
+docker run -d -p 3000:3000 \
+  -v $(pwd)/monitoring/grafana:/etc/grafana/provisioning \
+  grafana/grafana
+# Prometheus: localhost:9090, Grafana: localhost:3000
+# 각 서비스 메트릭: /actuator/prometheus 엔드포인트로 수집
 ```
 
 ### 테스트
@@ -89,6 +126,12 @@ CREATE DATABASE orders;
 
 ### 서비스 간 통신 구조
 ```
+Client ──HTTP──> Gateway (8080, Java)
+                   ├─ JWT 인증 (JwtAuthenticationFilter)
+                   ├─ Rate Limiting (Redis Token Bucket, IP 기반)
+                   ├─ /api/products/** ──> Product Service (8081)
+                   └─ /api/orders/**  ──> Order Service (8082)
+
 Order Service (Client)  ──gRPC/REST──>  Product Service (Server)
      │                                       │
      ├─ REST API (8082)                      ├─ REST API (8081)
@@ -123,6 +166,30 @@ Order Service (Client)  ──gRPC/REST──>  Product Service (Server)
 1. `product-grpc/src/main/proto/product_service.proto` 수정
 2. `./gradlew :product-grpc:generateProto` 실행
 3. product와 order 모듈 재빌드 (의존성으로 자동 반영)
+
+### Gateway Service (Java)
+Gateway는 유일하게 **Java**로 작성된 서비스 (나머지는 Kotlin):
+- **WebFlux 기반**: Spring Cloud Gateway + Reactor Netty (비동기/논블로킹)
+- **인증**: `JwtAuthenticationFilter`가 요청 헤더의 Bearer 토큰 검증, `/auth/**` 경로는 제외
+- **회원가입/로그인**: `POST /auth/register`, `POST /auth/login` → JWT 발급
+- **사용자 DB**: R2DBC + MySQL (`auth` 스키마), `schema.sql`로 테이블 자동 생성
+- **Rate Limiting**: Redis Token Bucket (IP 기반, 초당 10개 / 버스트 20개)
+- **라우팅**: `/api/products/**` → 8081, `/api/orders/**` → 8082
+
+```bash
+# Gateway를 통한 API 호출 예시
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "user1", "password": "pass"}'
+
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "user1", "password": "pass"}'
+# 응답의 token을 이후 요청에 사용
+
+curl http://localhost:8080/api/products/1 \
+  -H "Authorization: Bearer <token>"
+```
 
 ### 분산락 패턴
 Product Service는 **Redisson 분산락**을 AOP로 적용:
@@ -176,14 +243,16 @@ Order Service는 BigQuery에 주문 데이터를 적재하여 분석:
 - **allOpen**: `@Entity`, `@MappedSuperclass`, `@Embeddable` 클래스에 open 키워드 자동 적용
 
 ### 기술 스택
-- **언어**: Kotlin 2.2.21
-- **프레임워크**: Spring Boot 4.0.1, Spring 7.0.2
+- **언어**: Kotlin 2.2.21 (product, order, load-test), Java 21 (gateway)
+- **프레임워크**: Spring Boot 4.0.1, Spring 7.0.2, Spring Cloud 2025.1.1 (gateway)
 - **JVM**: Java 21 (Virtual Threads 활성화)
-- **데이터베이스**: MySQL 8 (Product), PostgreSQL (Order) + Flyway 마이그레이션
-- **캐시/락**: Redis + Redisson
+- **데이터베이스**: MySQL 8 (Product, Gateway-auth), PostgreSQL (Order) + Flyway 마이그레이션
+- **캐시/락**: Redis + Redisson (분산락), Redis Reactive (rate limiting)
 - **gRPC**: io.grpc + Protocol Buffers (proto3), Spring gRPC 1.0.1
 - **메시징**: Kafka (Spring Kafka with auto-configuration)
 - **분석**: Google Cloud BigQuery (Order Service)
+- **부하 테스트**: Gatling 3.13.5 (Kotlin DSL)
+- **모니터링**: Prometheus + Grafana, Micrometer Tracing (Brave), Loki (로그 수집)
 - **빌드**: Gradle (Groovy DSL)
 - **테스트**: JUnit 5, Testcontainers (MySQL, PostgreSQL, Kafka)
 
@@ -201,6 +270,15 @@ Order Service는 BigQuery에 주문 데이터를 적재하여 분석:
 ### Kafka 연결 실패
 - Kafka가 실행 중인지 확인: `docker ps | grep kafka`
 - application.yml의 `spring.kafka.bootstrap-servers` 확인 (기본값: localhost:9092)
+
+### Gateway 기동 실패 (R2DBC 연결 오류)
+- MySQL `auth` DB와 `test` 사용자가 존재하는지 확인
+- Redis가 실행 중인지 확인 (Rate Limiting에 필요): `docker ps | grep redis`
+- gateway의 `application.yml`에 Redis username/password가 설정되어 있음 — 로컬 Redis 기본 설정과 다를 수 있음
+
+### Gateway 401 Unauthorized
+- `/auth/login`으로 토큰 발급 후 `Authorization: Bearer <token>` 헤더 포함 필요
+- JWT secret은 `gateway.jwt.secret` (application.yml)에 Base64 인코딩된 값으로 설정
 
 ## REST API 수동 테스트
 
