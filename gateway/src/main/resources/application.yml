@@ -63,6 +63,21 @@ logging:
     org.springframework.cloud.gateway: DEBUG
     reactor.netty.http.client: DEBUG
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: 1.0
+
 gateway:
   jwt:
     secret: dG95LXNlcnZlci1nYXRld2F5LXNlY3JldC1rZXktZm9yLWhtYWMtc2hhMjU2LW11c3QtYmUtMjU2LWJpdHM=

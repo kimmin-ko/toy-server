@@ -90,7 +90,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,beans
   endpoint:
     health:
       show-details: always
@@ -102,6 +102,9 @@ management:
         http.server.requests: true
       percentiles:
         http.server.requests: 0.5, 0.95, 0.99
+  tracing:
+    sampling:
+      probability: 1.0
 
 # Logging
 logging:
@@ -110,3 +113,4 @@ logging:
     study.min: INFO
     org.hibernate.SQL: INFO
     org.hibernate.orm.jdbc.bind: INFO
+    brave.Tracer: WARN

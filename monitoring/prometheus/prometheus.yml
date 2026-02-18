@@ -6,7 +6,6 @@ rule_files:
   - "alert-rules.yml"
 
 scrape_configs:
-  # Order Service (Spring Boot Actuator)
   - job_name: 'order-service'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 5s
@@ -14,4 +13,22 @@ scrape_configs:
       - targets: ['host.docker.internal:8082']
         labels:
           service: 'order'
+          environment: 'local'
+
+  - job_name: 'product-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          service: 'product'
+          environment: 'local'
+
+  - job_name: 'gateway'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          service: 'gateway'
           environment: 'local'
